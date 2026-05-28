@@ -118,6 +118,14 @@ export const EXPORT_TASKS_FIXED = `
               taskObj.deferDate = null;
             }
             break;
+          case 'plannedDate':
+            try {
+              const plannedDate = task.plannedDate();
+              taskObj.plannedDate = plannedDate ? plannedDate.toISOString() : null;
+            } catch (e) {
+              taskObj.plannedDate = null;
+            }
+            break;
           case 'completed':
             taskObj.completed = task.completed();
             break;

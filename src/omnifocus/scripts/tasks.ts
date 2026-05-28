@@ -72,7 +72,18 @@ export const LIST_TASKS_SCRIPT = `
           continue;
         }
       }
-      
+
+      if (filter.plannedBefore || filter.plannedAfter) {
+        try {
+          const plannedDate = task.plannedDate();
+          if (!plannedDate && (filter.plannedBefore || filter.plannedAfter)) continue;
+          if (filter.plannedBefore && plannedDate > new Date(filter.plannedBefore)) continue;
+          if (filter.plannedAfter && plannedDate < new Date(filter.plannedAfter)) continue;
+        } catch (e) {
+          continue;
+        }
+      }
+
       // Available filter
       if (filter.available) {
         try {
@@ -83,7 +94,7 @@ export const LIST_TASKS_SCRIPT = `
           continue;
         }
       }
-      
+
       // Build task object with safe property access
       const taskObj = {
         id: task.id(),
@@ -116,18 +127,23 @@ export const LIST_TASKS_SCRIPT = `
         const deferDate = task.deferDate();
         if (deferDate) taskObj.deferDate = deferDate.toISOString();
       } catch (e) {}
-      
+
+      try {
+        const plannedDate = task.plannedDate();
+        if (plannedDate) taskObj.plannedDate = plannedDate.toISOString();
+      } catch (e) {}
+
       try {
         const tags = task.tags();
         taskObj.tags = tags.map(t => t.name());
       } catch (e) {
         taskObj.tags = [];
       }
-      
+
       tasks.push(taskObj);
       count++;
     }
-    
+
     const endTime = Date.now();
     const totalFiltered = count; // Tasks that matched filters (including those beyond limit)
     let totalAvailable = 0;
@@ -197,7 +213,18 @@ export const LIST_TASKS_SCRIPT = `
           continue;
         }
       }
-      
+
+      if (filter.plannedBefore || filter.plannedAfter) {
+        try {
+          const plannedDate = task.plannedDate();
+          if (!plannedDate && (filter.plannedBefore || filter.plannedAfter)) continue;
+          if (filter.plannedBefore && plannedDate > new Date(filter.plannedBefore)) continue;
+          if (filter.plannedAfter && plannedDate < new Date(filter.plannedAfter)) continue;
+        } catch (e) {
+          continue;
+        }
+      }
+
       // Available filter
       if (filter.available) {
         try {
@@ -208,7 +235,7 @@ export const LIST_TASKS_SCRIPT = `
           continue;
         }
       }
-      
+
       totalAvailable++;
     }
     
@@ -231,9 +258,11 @@ export const LIST_TASKS_SCRIPT = `
           dueAfter: filter.dueAfter,
           deferBefore: filter.deferBefore,
           deferAfter: filter.deferAfter,
+          plannedBefore: filter.plannedBefore,
+          plannedAfter: filter.plannedAfter,
           available: filter.available
         },
-        performance_note: totalAvailable > 500 ? 
+        performance_note: totalAvailable > 500 ?
           "Large result set. Consider using more specific filters for better performance." : 
           undefined
       }
@@ -261,6 +290,7 @@ export const CREATE_TASK_SCRIPT = `
     if (taskData.flagged !== undefined) taskObj.flagged = taskData.flagged;
     if (taskData.dueDate !== undefined && taskData.dueDate) taskObj.dueDate = new Date(taskData.dueDate);
     if (taskData.deferDate !== undefined && taskData.deferDate) taskObj.deferDate = new Date(taskData.deferDate);
+    if (taskData.plannedDate !== undefined && taskData.plannedDate) taskObj.plannedDate = new Date(taskData.plannedDate);
     if (taskData.estimatedMinutes !== undefined) taskObj.estimatedMinutes = taskData.estimatedMinutes;
     
     // Handle tags before task creation
@@ -356,7 +386,10 @@ export const UPDATE_TASK_SCRIPT_SIMPLE = `
     if (updates.name !== undefined) task.name = updates.name;
     if (updates.note !== undefined) task.note = updates.note;
     if (updates.flagged !== undefined) task.flagged = updates.flagged;
-    
+    if (updates.plannedDate !== undefined) {
+      task.plannedDate = updates.plannedDate ? new Date(updates.plannedDate) : null;
+    }
+
     // Handle project assignment (simplified version)
     if (updates.projectId !== undefined) {
       if (updates.projectId === "") {
@@ -402,6 +435,7 @@ export const UPDATE_TASK_SCRIPT_SIMPLE = `
     if (updates.name !== undefined) response.changes.name = updates.name;
     if (updates.note !== undefined) response.changes.note = updates.note;
     if (updates.flagged !== undefined) response.changes.flagged = updates.flagged;
+    if (updates.plannedDate !== undefined) response.changes.plannedDate = updates.plannedDate;
     if (updates.projectId !== undefined) {
       response.changes.projectId = updates.projectId;
       if (updates.projectId !== "") {
@@ -413,7 +447,7 @@ export const UPDATE_TASK_SCRIPT_SIMPLE = `
         response.changes.projectName = "Inbox";
       }
     }
-    
+
     return JSON.stringify(response);
   } catch (error) {
     return JSON.stringify({
@@ -450,6 +484,9 @@ export const UPDATE_TASK_SCRIPT = `
     }
     if (updates.deferDate !== undefined) {
       task.deferDate = updates.deferDate ? new Date(updates.deferDate) : null;
+    }
+    if (updates.plannedDate !== undefined) {
+      task.plannedDate = updates.plannedDate ? new Date(updates.plannedDate) : null;
     }
     if (updates.estimatedMinutes !== undefined) {
       task.estimatedMinutes = updates.estimatedMinutes;
@@ -540,6 +577,7 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.flagged !== undefined) response.changes.flagged = updates.flagged;
     if (updates.dueDate !== undefined) response.changes.dueDate = updates.dueDate;
     if (updates.deferDate !== undefined) response.changes.deferDate = updates.deferDate;
+    if (updates.plannedDate !== undefined) response.changes.plannedDate = updates.plannedDate;
     if (updates.estimatedMinutes !== undefined) response.changes.estimatedMinutes = updates.estimatedMinutes;
     if (updates.tags !== undefined) response.changes.tags = updates.tags;
     if (updates.projectId !== undefined) {
@@ -792,14 +830,19 @@ export const TODAYS_AGENDA_SCRIPT = `
           const deferDate = task.deferDate();
           if (deferDate) taskObj.deferDate = deferDate.toISOString();
         } catch (e) {}
-        
+
+        try {
+          const plannedDate = task.plannedDate();
+          if (plannedDate) taskObj.plannedDate = plannedDate.toISOString();
+        } catch (e) {}
+
         try {
           const tags = task.tags();
           taskObj.tags = tags.map(t => t.name());
         } catch (e) {
           taskObj.tags = [];
         }
-        
+
         tasks.push(taskObj);
       }
     }
@@ -898,7 +941,17 @@ export const GET_TASK_COUNT_SCRIPT = `
           if (filter.deferBefore || filter.deferAfter) continue;
         }
       }
-      
+
+      if (filter.plannedBefore || filter.plannedAfter) {
+        try {
+          const plannedDate = task.plannedDate();
+          if (filter.plannedBefore && (!plannedDate || plannedDate > new Date(filter.plannedBefore))) continue;
+          if (filter.plannedAfter && (!plannedDate || plannedDate < new Date(filter.plannedAfter))) continue;
+        } catch (e) {
+          if (filter.plannedBefore || filter.plannedAfter) continue;
+        }
+      }
+
       if (filter.available) {
         try {
           if (task.completed() || task.dropped()) continue;
@@ -930,6 +983,8 @@ export const GET_TASK_COUNT_SCRIPT = `
         dueAfter: filter.dueAfter,
         deferBefore: filter.deferBefore,
         deferAfter: filter.deferAfter,
+        plannedBefore: filter.plannedBefore,
+        plannedAfter: filter.plannedAfter,
         available: filter.available
       }
     });

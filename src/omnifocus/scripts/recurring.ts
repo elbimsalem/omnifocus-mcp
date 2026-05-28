@@ -1,32 +1,53 @@
 export const ANALYZE_RECURRING_TASKS_SCRIPT = `
+  // Parse an iCal RRULE string into {unit, steps} for downstream consumers.
+  // Examples: "FREQ=WEEKLY;BYDAY=WE" -> {unit:"weeks", steps:1}; "FREQ=DAILY;INTERVAL=3" -> {unit:"days", steps:3}.
+  function parseRRule(rrule) {
+    if (!rrule || typeof rrule !== 'string') return { unit: undefined, steps: undefined };
+    const parts = {};
+    rrule.split(';').forEach(p => {
+      const [k, v] = p.split('=');
+      if (k && v) parts[k.toUpperCase()] = v;
+    });
+    const freqMap = { DAILY: 'days', WEEKLY: 'weeks', MONTHLY: 'months', YEARLY: 'years' };
+    const unit = freqMap[parts.FREQ];
+    const steps = parts.INTERVAL ? parseInt(parts.INTERVAL, 10) : 1;
+    return { unit: unit, steps: steps };
+  }
+
   const options = {{options}};
-  
+
   try {
     const recurringTasks = [];
     const allTasks = doc.flattenedTasks();
     const now = new Date();
-    
+
     for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
-      
+
       // Check if task has repetition rule
       const repetitionRule = task.repetitionRule();
       if (!repetitionRule) continue;
-      
+
       // Skip if filtering by active only and task is completed
       if (options.activeOnly && task.completed()) continue;
-      
+
+      // OmniFocus JXA exposes repetitionMethod (string) and recurrence (RRULE).
+      // The older .method/.unit/.steps property names don't exist; parse the RRULE for unit/steps.
+      const ruleMethod = repetitionRule.repetitionMethod;
+      const ruleRecurrence = repetitionRule.recurrence;
+      const parsed = parseRRule(ruleRecurrence);
+
       const taskInfo = {
         id: task.id(),
         name: task.name(),
         repetitionRule: {
-          method: repetitionRule.method,
-          unit: repetitionRule.unit,
-          steps: repetitionRule.steps,
-          fixed: repetitionRule.fixed
+          method: ruleMethod,
+          recurrence: ruleRecurrence,
+          unit: parsed.unit,
+          steps: parsed.steps
         }
       };
-      
+
       // Add project info
       try {
         const project = task.containingProject();
@@ -35,13 +56,18 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
           taskInfo.projectId = project.id();
         }
       } catch (e) {}
-      
+
       // Add dates
       const deferDate = task.deferDate();
       if (deferDate) taskInfo.deferDate = deferDate.toISOString();
-      
+
       const dueDate = task.dueDate();
       if (dueDate) taskInfo.dueDate = dueDate.toISOString();
+
+      try {
+        const plannedDate = task.plannedDate();
+        if (plannedDate) taskInfo.plannedDate = plannedDate.toISOString();
+      } catch (e) {}
       
       // Calculate next occurrence
       if (dueDate && !task.completed()) {
@@ -64,27 +90,27 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
         } catch (e) {}
       }
       
-      // Calculate frequency description
+      // Calculate frequency description (from parsed RRULE)
       let frequencyDesc = '';
-      switch(repetitionRule.unit) {
+      switch(parsed.unit) {
         case 'days':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Daily';
-          else if (repetitionRule.steps === 7) frequencyDesc = 'Weekly';
-          else if (repetitionRule.steps === 14) frequencyDesc = 'Biweekly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' days';
+          if (parsed.steps === 1) frequencyDesc = 'Daily';
+          else if (parsed.steps === 7) frequencyDesc = 'Weekly';
+          else if (parsed.steps === 14) frequencyDesc = 'Biweekly';
+          else frequencyDesc = 'Every ' + parsed.steps + ' days';
           break;
         case 'weeks':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Weekly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' weeks';
+          if (parsed.steps === 1) frequencyDesc = 'Weekly';
+          else frequencyDesc = 'Every ' + parsed.steps + ' weeks';
           break;
         case 'months':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Monthly';
-          else if (repetitionRule.steps === 3) frequencyDesc = 'Quarterly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' months';
+          if (parsed.steps === 1) frequencyDesc = 'Monthly';
+          else if (parsed.steps === 3) frequencyDesc = 'Quarterly';
+          else frequencyDesc = 'Every ' + parsed.steps + ' months';
           break;
         case 'years':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Yearly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' years';
+          if (parsed.steps === 1) frequencyDesc = 'Yearly';
+          else frequencyDesc = 'Every ' + parsed.steps + ' years';
           break;
       }
       taskInfo.frequency = frequencyDesc;
@@ -160,25 +186,37 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
 `;
 
 export const GET_RECURRING_PATTERNS_SCRIPT = `
+  function parseRRule(rrule) {
+    if (!rrule || typeof rrule !== 'string') return { unit: undefined, steps: undefined };
+    const parts = {};
+    rrule.split(';').forEach(p => {
+      const [k, v] = p.split('=');
+      if (k && v) parts[k.toUpperCase()] = v;
+    });
+    const freqMap = { DAILY: 'days', WEEKLY: 'weeks', MONTHLY: 'months', YEARLY: 'years' };
+    return { unit: freqMap[parts.FREQ], steps: parts.INTERVAL ? parseInt(parts.INTERVAL, 10) : 1 };
+  }
+
   try {
     const patterns = {};
     const projectPatterns = {};
     const allTasks = doc.flattenedTasks();
     let totalRecurring = 0;
-    
+
     for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
       const repetitionRule = task.repetitionRule();
       if (!repetitionRule) continue;
-      
+
       totalRecurring++;
-      
-      // Create pattern key
-      const patternKey = repetitionRule.unit + '_' + repetitionRule.steps;
+
+      // Parse the RRULE; the older .unit/.steps properties don't exist via JXA.
+      const parsed = parseRRule(repetitionRule.recurrence);
+      const patternKey = (parsed.unit || 'unknown') + '_' + (parsed.steps || 'unknown');
       if (!patterns[patternKey]) {
         patterns[patternKey] = {
-          unit: repetitionRule.unit,
-          steps: repetitionRule.steps,
+          unit: parsed.unit,
+          steps: parsed.steps,
           count: 0,
           tasks: []
         };

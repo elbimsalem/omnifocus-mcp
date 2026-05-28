@@ -6,6 +6,7 @@ export interface OmniFocusTask {
   projectId?: string;
   dueDate?: Date;
   deferDate?: Date;
+  plannedDate?: Date;
   completionDate?: Date;
   flagged: boolean;
   tags: string[];
@@ -48,8 +49,13 @@ export interface OmniFocusTag {
 }
 
 export interface RepetitionRule {
-  method: 'fixed' | 'startAfterCompletion' | 'dueAfterCompletion';
-  interval: string; // e.g., "1 week", "2 days"
+  // OmniFocus JXA exposes `repetitionMethod` (e.g. "due after completion") and
+  // `recurrence` (an iCal RRULE string like "FREQ=WEEKLY;BYDAY=WE").
+  method?: string;
+  recurrence?: string;
+  // Derived from the RRULE for backward compat with consumers expecting unit+steps.
+  unit?: 'days' | 'weeks' | 'months' | 'years';
+  steps?: number;
 }
 
 export interface TaskFilter {
@@ -61,6 +67,8 @@ export interface TaskFilter {
   dueAfter?: Date;
   deferBefore?: Date;
   deferAfter?: Date;
+  plannedBefore?: Date;
+  plannedAfter?: Date;
   search?: string;
   inInbox?: boolean;
   available?: boolean;
@@ -80,6 +88,7 @@ export interface TaskUpdate {
   flagged?: boolean;
   dueDate?: Date | null;
   deferDate?: Date | null;
+  plannedDate?: Date | null;
   estimatedMinutes?: number | null;
   tags?: string[];
   projectId?: string | null;

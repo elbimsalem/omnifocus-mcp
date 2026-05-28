@@ -35,6 +35,11 @@ export class UpdateTaskTool extends BaseTool {
         format: 'date-time',
         description: 'New defer date (null to clear)',
       },
+      plannedDate: {
+        type: ['string', 'null'],
+        format: 'date-time',
+        description: 'New planned date (null to clear). OmniFocus planning field.',
+      },
       estimatedMinutes: {
         type: ['number', 'null'],
         description: 'New estimated time (null to clear)',
@@ -63,6 +68,7 @@ export class UpdateTaskTool extends BaseTool {
         ...(updates.name !== undefined && { name: updates.name }),
         ...(updates.note !== undefined && { note: updates.note }),
         ...(updates.flagged !== undefined && { flagged: updates.flagged }),
+        ...(updates.plannedDate !== undefined && { plannedDate: updates.plannedDate }),
         ...(updates.projectId !== undefined && { projectId: updates.projectId })
       };
       

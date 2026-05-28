@@ -34,6 +34,11 @@ export class CreateTaskTool extends BaseTool {
         format: 'date-time',
         description: 'Defer date for the task',
       },
+      plannedDate: {
+        type: 'string',
+        format: 'date-time',
+        description: 'Planned date for the task (OmniFocus planning field)',
+      },
       estimatedMinutes: {
         type: 'number',
         description: 'Estimated time in minutes',

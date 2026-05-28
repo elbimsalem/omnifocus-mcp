@@ -101,7 +101,14 @@ export const EXPORT_TASKS_SCRIPT = `
         const dueDate = task.dueDate();
         if (dueDate) taskData.dueDate = dueDate.toISOString();
       }
-      
+
+      if (allFields.includes('plannedDate')) {
+        try {
+          const plannedDate = task.plannedDate();
+          if (plannedDate) taskData.plannedDate = plannedDate.toISOString();
+        } catch (e) {}
+      }
+
       if (allFields.includes('completed')) {
         taskData.completed = task.completed();
         if (task.completed()) {
